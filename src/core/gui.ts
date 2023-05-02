@@ -7,10 +7,4 @@ interface FPSGraph extends BladeApi<BladeController<View>> {
   end(): void
 }
 // Debug
-export const gui = new Pane()
-gui.registerPlugin(EssentialsPlugin)
 
-export const fpsGraph = gui.addBlade({
-  view: 'fpsgraph',
-  label: 'fpsgraph',
-}) as FPSGraph

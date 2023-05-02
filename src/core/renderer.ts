@@ -7,7 +7,6 @@ import {
   ACESFilmicToneMapping,
   Color,
 } from 'three'
-import { gui } from './gui'
 
 export const sizes = {
   width: window.innerWidth,
@@ -39,9 +38,6 @@ renderer.toneMappingExposure = 1
 const axesHelper = new AxesHelper()
 scene.add(axesHelper)
 
-gui.addInput(axesHelper, 'visible', {
-  label: 'AxesHelper',
-})
 
 function updateRenderer() {
   renderer.setSize(sizes.width, sizes.height)
@@ -58,5 +54,4 @@ updateRenderer()
 
 export default {
   renderer,
-  gui,
 }
