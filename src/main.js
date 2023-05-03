@@ -1,3 +1,4 @@
+import './style.css'
 import * as THREE from 'three'
 import { renderer, scene } from './core/renderer'
 import camera from './core/camera'
@@ -5,6 +6,13 @@ import { controls } from './core/orbit-control'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { MeshBVH, MeshBVHVisualizer, StaticGeometryGenerator } from "three-mesh-bvh"
+import { Pathfinding, PathfindingHelper } from 'three-pathfinding';
+
+const HELPER = new PathfindingHelper();
+scene.add( HELPER );
+
+const PATHFINDING = new Pathfinding();
+const ZONE = 'level1';
 
 const params = {
 
@@ -28,13 +36,13 @@ const params = {
 
 let environment, collider, visualizer;
 const spheres = [];
+let raycastTarget
+
 const hits = [];
 const tempSphere = new THREE.Sphere();
 const deltaVec = new THREE.Vector3();
 const tempVec = new THREE.Vector3();
 const forwardVector = new THREE.Vector3( 0, 0, 1 );
-
-import './style.css'
 
 // Lights
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.5)
@@ -47,8 +55,6 @@ directionalLight.shadow.normalBias = 0.05
 directionalLight.position.set(0.25, 2, 2.25)
 scene.add(directionalLight)
 
-await loadColliderEnvironment();
-
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 let x = 0;
@@ -56,26 +62,32 @@ let y = 0;
 renderer.domElement.addEventListener( 'pointerdown', e => {
   x = e.clientX;
   y = e.clientY;
-} );
+});
 
 renderer.domElement.addEventListener( 'pointerup', e => {
-
-  const totalDelta = Math.abs( e.clientX - x ) + Math.abs( e.clientY - y );
-  if ( totalDelta > 2 ) return;
-
+  //   const totalDelta = Math.abs( e.clientX - x ) + Math.abs( e.clientY - y );
+  //   if ( totalDelta > 2 ) return;
   mouse.x = ( e.clientX / window.innerWidth ) * 2 - 1;
   mouse.y = - ( e.clientY / window.innerHeight ) * 2 + 1;
   raycaster.setFromCamera( mouse, camera );
+  const intersects = raycaster.intersectObjects([raycastTarget], true);
+  if (intersects.length > 0) {
+    const targetGroup = PATHFINDING.getGroup(ZONE, intersects[0].point);
+    const closestNode = PATHFINDING.getClosestNode(intersects[0].point, ZONE, targetGroup)
+    const randomNode = PATHFINDING.getRandomNode(ZONE, targetGroup)
+    const path = PATHFINDING.findPath(closestNode.centroid, randomNode, ZONE, targetGroup);
+    const sphere = createSphere();
+    sphere.position.copy(intersects[0].point)
+    HELPER.setPlayerPosition(intersects[0].point)
+    HELPER.setTargetPosition(randomNode)
+    HELPER.setPath(path)
 
-  const sphere = createSphere();
-  sphere.position.copy( camera.position ).addScaledVector( raycaster.ray.direction, 3 );
-
-  sphere.velocity
-    .set( Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5 )
-    .addScaledVector( raycaster.ray.direction, 10 * Math.random() + 15 )
-    .multiplyScalar( 0.5 );
-}
-);
+    for (const waypoint of path) {
+      // const waypointSphere = createSphere()
+      // waypointSphere.position.copy(waypoint)
+    }
+  }
+});
 
 // Update physics and animation
 function update( delta ) {
@@ -119,20 +131,20 @@ function update( delta ) {
 }
 
 async function loadColliderEnvironment() {
-  const res = await new GLTFLoader().loadAsync("../gltf/terrain-for-bvh-study.gltf")
-  console.log(res.scene)
-	environment = res.scene;
-	// environment.scale.setScalar( 0.05 );
+  const res = await new GLTFLoader().loadAsync("../gltf/with-scale-and-position.gltf")
 
-	// collect all geometries to merge
+  // init bvh:
+  const geometryMeshes = res.scene.children.filter(child=> child.isMesh && child.userData.gltfExtensions.EXT_collections.collections[0]==="geometry")
+  const levelGeometry = new THREE.Scene()
+  for (const mesh of geometryMeshes) {
+    levelGeometry.add(mesh)
+  }
+  environment = levelGeometry
 	environment.updateMatrixWorld( true );
-
 	const staticGenerator = new StaticGeometryGenerator( environment );
 	staticGenerator.attributes = [ 'position' ];
-
 	const mergedGeometry = staticGenerator.generate();
 	mergedGeometry.boundsTree = new MeshBVH( mergedGeometry );
-
 	collider = new THREE.Mesh( mergedGeometry );
 	collider.material.wireframe = true;
 	collider.material.opacity = 1;
@@ -143,19 +155,38 @@ async function loadColliderEnvironment() {
 	scene.add( collider );
 	scene.add( environment );
 
-		environment.traverse( c => {
+  // Add shadows
+  environment.traverse( c => {
+    if ( c.material ) {
+      c.material.color.setHex( 0x000000 );
+      c.castShadow = true;
+      c.receiveShadow = true;
+      c.material.shadowSide = 2;
+    }
+  });
 
-			if ( c.material ) {
+  // Init navmesh
+  const navmesh = res.scene.children.filter(child=> child.isMesh && child.userData.gltfExtensions.EXT_collections.collections[0]==="navmesh")[0]
+  console.log("here's our problem child navmesh", navmesh)
+  PATHFINDING.setZoneData(ZONE, Pathfinding.createZone(navmesh.geometry));
 
-				c.castShadow = true;
-				c.receiveShadow = true;
-				c.material.shadowSide = 2;
+  // VISUALIZE NAVMESH!
+  for (const vert of PATHFINDING.zones.level1.vertices) {
+    const indicatorSize = 0.2
+    const geometry = new THREE.BoxGeometry( indicatorSize,indicatorSize,indicatorSize); 
+    const material = new THREE.MeshBasicMaterial( {color: 0x00ff00} ); 
+    const cube = new THREE.Mesh( geometry, material ); 
+    cube.position.copy(vert)
+    scene.add( cube );
+  }
 
-			}
+  // Visible navmesh:
+  scene.add(navmesh)
+  navmesh.visible = false
+  raycastTarget = navmesh
 
-	} );
+  // Add wanderers
 }
-
 
 function createSphere() {
 	const white = new THREE.Color( 0xffffff );
@@ -331,15 +362,13 @@ function updateSphereCollisions( deltaTime ) {
 				s2.velocity.addScaledVector( velocityDifference, newVel2 );
 			}
 		}
-
 		s1.position.copy( c1.center );
-
 	}
 
 }
 
 const clock = new THREE.Clock()
-
+await loadColliderEnvironment();
 const loop = () => {
   controls.update()
   const delta = Math.min( clock.getDelta(), 0.1 );

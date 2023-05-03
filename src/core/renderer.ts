@@ -35,8 +35,8 @@ renderer.toneMapping = ACESFilmicToneMapping
 renderer.toneMappingExposure = 1
 
 // Axes Helper
-const axesHelper = new AxesHelper()
-scene.add(axesHelper)
+// const axesHelper = new AxesHelper()
+// scene.add(axesHelper)
 
 
 function updateRenderer() {
