@@ -455,7 +455,10 @@ function resetPath(sphere) {
 }
 
 const clock = new THREE.Clock()
-await loadColliderEnvironment();
+
+const init = async () => {
+	await loadColliderEnvironment();
+}
 const loop = () => {
   controls.update()
   const delta = Math.min( clock.getDelta(), 0.1 );
@@ -465,4 +468,5 @@ const loop = () => {
   renderer.render(scene, camera)
   requestAnimationFrame(loop)
 }
+init()
 loop()
