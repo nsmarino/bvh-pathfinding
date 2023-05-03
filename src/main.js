@@ -129,11 +129,11 @@ function addMonster(startPoint) {
   const sphere = createSphere();
   sphere.position.copy(startPoint)
   sphere.path = path
-  const HELPER = new PathfindingHelper();
-  scene.add( HELPER );
-  HELPER.setPlayerPosition(startPoint)
-  HELPER.setTargetPosition(randomNode)
-  HELPER.setPath(path)
+  sphere.HELPER = new PathfindingHelper();
+  scene.add( sphere.HELPER );
+  sphere.HELPER.setPlayerPosition(startPoint)
+  sphere.HELPER.setTargetPosition(randomNode)
+  sphere.HELPER.setPath(path)
   spheres.push(sphere)
 }
 
@@ -448,12 +448,9 @@ function resetPath(sphere) {
   const randomNode = PATHFINDING.getRandomNode(ZONE, targetGroup)
   const path = PATHFINDING.findPath(closestNode.centroid, randomNode, ZONE, targetGroup);
   sphere.path = path
-  const HELPER = new PathfindingHelper();
-  scene.add( HELPER );
-  HELPER.setPlayerPosition(sphere.position)
-  HELPER.setTargetPosition(randomNode)
-  HELPER.setPath(path)
-
+  sphere.HELPER.setPlayerPosition(sphere.position)
+  sphere.HELPER.setTargetPosition(randomNode)
+  sphere.HELPER.setPath(path)
 }
 
 const clock = new THREE.Clock()
