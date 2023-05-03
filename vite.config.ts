@@ -9,4 +9,5 @@ export default defineConfig({
     },
   },
   plugins: [glsl()],
+  assetsInclude: ['**/*.gltf', '**/*.glb' ]
 })

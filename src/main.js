@@ -8,6 +8,8 @@ import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUti
 import { MeshBVH, MeshBVHVisualizer, StaticGeometryGenerator } from "three-mesh-bvh"
 import { Pathfinding, PathfindingHelper } from 'three-pathfinding';
 
+import level from '../assets/gltf/updated-navmesh.gltf'
+
 const PATHFINDING = new Pathfinding();
 const ZONE = 'level1';
 const SPEED = 2
@@ -175,7 +177,7 @@ function update( delta ) {
 }
 
 async function loadColliderEnvironment() {
-  const res = await new GLTFLoader().loadAsync("../gltf/updated-navmesh.gltf")
+  const res = await new GLTFLoader().loadAsync(level)
 
   // init bvh:
   const geometryMeshes = res.scene.children.filter(child=> child.isMesh && child.userData.gltfExtensions.EXT_collections.collections[0]==="geometry")
