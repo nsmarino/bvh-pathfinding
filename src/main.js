@@ -8,12 +8,10 @@ import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUti
 import { MeshBVH, MeshBVHVisualizer, StaticGeometryGenerator } from "three-mesh-bvh"
 import { Pathfinding, PathfindingHelper } from 'three-pathfinding';
 
-const HELPER = new PathfindingHelper();
-scene.add( HELPER );
-
 const PATHFINDING = new Pathfinding();
 const ZONE = 'level1';
-
+const SPEED = 2
+const monsterCount = 100
 const params = {
 
 	displayCollider: false,
@@ -55,52 +53,98 @@ directionalLight.shadow.normalBias = 0.05
 directionalLight.position.set(0.25, 2, 2.25)
 scene.add(directionalLight)
 
+const skyGeo = new THREE.SphereGeometry(1000, 25, 25); 
+// const basicSkyMat = new THREE.MeshBasicMaterial( {color: 0x00ff00} ); 
+// const loader  = new THREE.TextureLoader()
+// const texture = loader.load( "/image.jpeg" );
+// const imageSkyMat = new THREE.MeshPhongMaterial({ 
+//   map: texture,
+// });
+const shaderSkyMat = new THREE.ShaderMaterial({
+  uniforms: {
+    color1: {
+      value: new THREE.Color("blue")
+    },
+    color2: {
+      value: new THREE.Color("lightgreen")
+    }
+  },
+  vertexShader: `
+    varying vec2 vUv;
+
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform vec3 color1;
+    uniform vec3 color2;
+  
+    varying vec2 vUv;
+    
+    void main() {
+      
+      gl_FragColor = vec4(mix(color1, color2, vUv.y), 1.0);
+    }
+  `,
+});
+const sky = new THREE.Mesh(skyGeo, shaderSkyMat);
+sky.material.side = THREE.BackSide;
+scene.add(sky);
+
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
-let x = 0;
-let y = 0;
-renderer.domElement.addEventListener( 'pointerdown', e => {
-  x = e.clientX;
-  y = e.clientY;
-});
 
 renderer.domElement.addEventListener( 'pointerup', e => {
-  //   const totalDelta = Math.abs( e.clientX - x ) + Math.abs( e.clientY - y );
-  //   if ( totalDelta > 2 ) return;
-  mouse.x = ( e.clientX / window.innerWidth ) * 2 - 1;
-  mouse.y = - ( e.clientY / window.innerHeight ) * 2 + 1;
-  raycaster.setFromCamera( mouse, camera );
-  const intersects = raycaster.intersectObjects([raycastTarget], true);
-  if (intersects.length > 0) {
-    const targetGroup = PATHFINDING.getGroup(ZONE, intersects[0].point);
-    const closestNode = PATHFINDING.getClosestNode(intersects[0].point, ZONE, targetGroup)
-    const randomNode = PATHFINDING.getRandomNode(ZONE, targetGroup)
-    const path = PATHFINDING.findPath(closestNode.centroid, randomNode, ZONE, targetGroup);
-    const sphere = createSphere();
-    sphere.position.copy(intersects[0].point)
-    HELPER.setPlayerPosition(intersects[0].point)
-    HELPER.setTargetPosition(randomNode)
-    HELPER.setPath(path)
+//   mouse.x = ( e.clientX / window.innerWidth ) * 2 - 1;
+//   mouse.y = - ( e.clientY / window.innerHeight ) * 2 + 1;
+//   raycaster.setFromCamera( mouse, camera );
+//   const intersects = raycaster.intersectObjects([raycastTarget], true);
+//   if (intersects.length > 0) {
+//     const targetGroup = PATHFINDING.getGroup(ZONE, intersects[0].point);
+//     const closestNode = PATHFINDING.getClosestNode(intersects[0].point, ZONE, targetGroup)
+//     const randomNode = PATHFINDING.getRandomNode(ZONE, targetGroup)
+//     const path = PATHFINDING.findPath(closestNode.centroid, randomNode, ZONE, targetGroup);
+//     const sphere = createSphere();
+//     sphere.position.copy(intersects[0].point)
+//     sphere.path = path
+    // const HELPER = new PathfindingHelper();
+    // scene.add( HELPER );
+//     HELPER.setPlayerPosition(intersects[0].point)
+//     HELPER.setTargetPosition(randomNode)
+//     HELPER.setPath(path)
 
-    for (const waypoint of path) {
-      // const waypointSphere = createSphere()
-      // waypointSphere.position.copy(waypoint)
-    }
-  }
+//     spheres.push(sphere)
+//   }
 });
+
+function addMonster(startPoint) {
+  const targetGroup = PATHFINDING.getGroup(ZONE, startPoint);
+  const closestNode = PATHFINDING.getClosestNode(startPoint, ZONE, targetGroup)
+  const randomNode = PATHFINDING.getRandomNode(ZONE, targetGroup)
+  const path = PATHFINDING.findPath(closestNode.centroid, randomNode, ZONE, targetGroup);
+  const sphere = createSphere();
+  sphere.position.copy(startPoint)
+  sphere.path = path
+  const HELPER = new PathfindingHelper();
+  scene.add( HELPER );
+  HELPER.setPlayerPosition(startPoint)
+  HELPER.setTargetPosition(randomNode)
+  HELPER.setPath(path)
+  spheres.push(sphere)
+}
 
 // Update physics and animation
 function update( delta ) {
-
+  for (const sphere of spheres) {
+    followPath(sphere, delta)
+  }
 	if ( collider ) {
-
 		const steps = params.physicsSteps;
 		for ( let i = 0; i < steps; i ++ ) {
-
 			updateSphereCollisions( delta / steps );
-
 		}
-
 	}
 
 	// Update collision animations
@@ -131,7 +175,7 @@ function update( delta ) {
 }
 
 async function loadColliderEnvironment() {
-  const res = await new GLTFLoader().loadAsync("../gltf/with-scale-and-position.gltf")
+  const res = await new GLTFLoader().loadAsync("../gltf/updated-navmesh.gltf")
 
   // init bvh:
   const geometryMeshes = res.scene.children.filter(child=> child.isMesh && child.userData.gltfExtensions.EXT_collections.collections[0]==="geometry")
@@ -167,7 +211,6 @@ async function loadColliderEnvironment() {
 
   // Init navmesh
   const navmesh = res.scene.children.filter(child=> child.isMesh && child.userData.gltfExtensions.EXT_collections.collections[0]==="navmesh")[0]
-  console.log("here's our problem child navmesh", navmesh)
   PATHFINDING.setZoneData(ZONE, Pathfinding.createZone(navmesh.geometry));
 
   // VISUALIZE NAVMESH!
@@ -185,7 +228,13 @@ async function loadColliderEnvironment() {
   navmesh.visible = false
   raycastTarget = navmesh
 
+  const navmeshVertices = PATHFINDING.zones[ZONE].vertices
+
   // Add wanderers
+  for ( let i = 0, l = monsterCount; i < l; i ++ ) {
+    const randomPointOnNavmesh = navmeshVertices[Math.floor(Math.random()*navmeshVertices.length)];
+    addMonster(randomPointOnNavmesh)
+  }
 }
 
 function createSphere() {
@@ -273,17 +322,17 @@ function updateSphereCollisions( deltaTime ) {
 
 		if ( collided ) {
 
-			// get the delta direction and reflect the velocity across it
+		// 	// get the delta direction and reflect the velocity across it
 			deltaVec.subVectors( tempSphere.center, sphereCollider.center ).normalize();
 			sphere.velocity.reflect( deltaVec );
 
-			// dampen the velocity and apply some drag
+		  // dampen the velocity and apply some drag
 			const dot = sphere.velocity.dot( deltaVec );
 			sphere.velocity.addScaledVector( deltaVec, - dot * 0.5 );
 			sphere.velocity.multiplyScalar( Math.max( 1.0 - deltaTime, 0 ) );
 
-			// update the sphere collider position
-			sphereCollider.center.copy( tempSphere.center );
+		  // update the sphere collider position
+		  sphereCollider.center.copy( tempSphere.center );
 		}
 
 	}
@@ -364,6 +413,44 @@ function updateSphereCollisions( deltaTime ) {
 		}
 		s1.position.copy( c1.center );
 	}
+
+}
+
+function followPath(sphere, deltaTime) {
+  if ( !sphere.path || !(sphere.path||[]).length ) {
+    resetPath(sphere)
+    return;
+  }
+
+  let targetPosition = sphere.path[ 0 ];
+  sphere.velocity = targetPosition.clone().sub( sphere.position );
+
+  if (sphere.velocity.lengthSq() > 0.1) {
+    sphere.velocity.normalize();
+    // Move to next waypoint
+    sphere.position.add( sphere.velocity.multiplyScalar( deltaTime * SPEED ) );
+  } else {
+    // Remove node from the path we calculated
+    sphere.path.shift();
+  }
+}
+
+function resetPath(sphere) {
+  const targetGroup = PATHFINDING.getGroup(ZONE, sphere.position);
+  if (!sphere.position.x) {
+    // Collision with BVH due to bad navmesh
+    return
+  }
+  // console.log("Target group", targetGroup)
+  const closestNode = PATHFINDING.getClosestNode(sphere.position, ZONE, targetGroup)
+  const randomNode = PATHFINDING.getRandomNode(ZONE, targetGroup)
+  const path = PATHFINDING.findPath(closestNode.centroid, randomNode, ZONE, targetGroup);
+  sphere.path = path
+  const HELPER = new PathfindingHelper();
+  scene.add( HELPER );
+  HELPER.setPlayerPosition(sphere.position)
+  HELPER.setTargetPosition(randomNode)
+  HELPER.setPath(path)
 
 }
 
