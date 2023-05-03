@@ -13,7 +13,7 @@ import level from '../assets/gltf/updated-navmesh.gltf'
 const PATHFINDING = new Pathfinding();
 const ZONE = 'level1';
 const SPEED = 2
-const monsterCount = 100
+const monsterCount = 50
 const params = {
 
 	displayCollider: false,
