@@ -1,7 +1,6 @@
 import {
   WebGLRenderer,
   Scene,
-  AxesHelper,
   sRGBEncoding,
   PCFShadowMap,
   ACESFilmicToneMapping,
