@@ -13,7 +13,8 @@ import level from '../assets/gltf/updated-navmesh.gltf'
 const PATHFINDING = new Pathfinding();
 const ZONE = 'level1';
 const SPEED = 2
-const monsterCount = 50
+const monsterCount = 10
+const maxWanderDistance = 10
 const params = {
 
 	displayCollider: false,
@@ -38,7 +39,6 @@ let environment, collider, visualizer;
 const spheres = [];
 let raycastTarget
 
-const hits = [];
 const tempSphere = new THREE.Sphere();
 const deltaVec = new THREE.Vector3();
 const tempVec = new THREE.Vector3();
@@ -122,25 +122,40 @@ renderer.domElement.addEventListener( 'pointerup', e => {
 });
 
 function addMonster(startPoint) {
+  const sphere = createSphere();
+
   const targetGroup = PATHFINDING.getGroup(ZONE, startPoint);
   const closestNode = PATHFINDING.getClosestNode(startPoint, ZONE, targetGroup)
-  const randomNode = PATHFINDING.getRandomNode(ZONE, targetGroup)
-  const path = PATHFINDING.findPath(closestNode.centroid, randomNode, ZONE, targetGroup);
-  const sphere = createSphere();
-  sphere.position.copy(startPoint)
-  sphere.path = path
-  sphere.HELPER = new PathfindingHelper();
-  scene.add( sphere.HELPER );
-  sphere.HELPER.setPlayerPosition(startPoint)
-  sphere.HELPER.setTargetPosition(randomNode)
-  sphere.HELPER.setPath(path)
+  sphere.originNode = closestNode
+  
+	const randomNode = getWanderTarget(closestNode.centroid, ZONE, targetGroup)
+	const path = PATHFINDING.findPath(closestNode.centroid, randomNode, ZONE, targetGroup);
+
+	sphere.position.copy(startPoint)
+	sphere.path = path
+
+	sphere.HELPER = new PathfindingHelper();
+	scene.add( sphere.HELPER );
+	sphere.HELPER.setPlayerPosition(startPoint)
+	sphere.HELPER.setTargetPosition(randomNode)
+	sphere.HELPER.setPath(path)
+
   spheres.push(sphere)
+}
+
+function getWanderTarget(origin, zone, group) {
+  let randomNode = PATHFINDING.getRandomNode(zone, group)
+  const distance = origin.distanceTo(randomNode)
+  if (distance > maxWanderDistance) {
+    randomNode = getWanderTarget(origin, zone, group)
+  }
+  return randomNode
 }
 
 // Update physics and animation
 function update( delta ) {
   for (const sphere of spheres) {
-    followPath(sphere, delta)
+    followWanderPath(sphere, delta)
   }
 	if ( collider ) {
 		const steps = params.physicsSteps;
@@ -148,32 +163,6 @@ function update( delta ) {
 			updateSphereCollisions( delta / steps );
 		}
 	}
-
-	// Update collision animations
-	for ( let i = 0, l = hits.length; i < l; i ++ ) {
-
-		const hit = hits[ i ];
-		hit.lifetime += delta;
-
-		const ratio = hit.lifetime / hit.maxLifetime;
-		let scale = Math.sin( ratio * 4.5 * Math.PI / 4 );
-		scale = 1.0 - Math.pow( 1.0 - scale, 2 );
-		hit.scale.setScalar( scale * hit.maxScale );
-		hit.material.opacity = 1.0 - Math.sin( ratio * 2 * Math.PI / 4 );
-
-		if ( ratio >= 1 ) {
-
-			hits.splice( i, 1 );
-			hit.parent.remove( hit );
-			hit.geometry.dispose();
-			hit.material.dispose();
-			i --;
-			l --;
-
-		}
-
-	}
-
 }
 
 async function loadColliderEnvironment() {
@@ -258,7 +247,7 @@ function createSphere() {
 	sphere.mass = Math.pow( radius, 3 ) * Math.PI * 4 / 3;
 
   // Add to array that gets checked against for collisions
-	spheres.push( sphere );
+	// spheres.push( sphere );
 	return sphere;
 
 }
@@ -418,7 +407,7 @@ function updateSphereCollisions( deltaTime ) {
 
 }
 
-function followPath(sphere, deltaTime) {
+function followWanderPath(sphere, deltaTime) {
   if ( !sphere.path || !(sphere.path||[]).length ) {
     resetPath(sphere)
     return;
@@ -437,26 +426,77 @@ function followPath(sphere, deltaTime) {
   }
 }
 
+function followPursuePath(sphere, destination, deltaTime) {
+  // if ( !sphere.path || !(sphere.path||[]).length ) {
+  //   console.log("ARRIVED!!!!")
+  //   // resetPath(sphere)
+  //   return;
+  // }
+  // const targetGroup = PATHFINDING.getGroup(ZONE, sphere.position);
+  // console.log(sphere.position, destination)
+  console.log("What goes into findPath", sphere.position, destination, ZONE)
+  const path = PATHFINDING.findPath(sphere.position, destination, ZONE, 0);
+  console.log("PATH", path)
+  if (path) {
+    sphere.HELPER.setPlayerPosition(sphere.position)
+    sphere.HELPER.setTargetPosition(destination)
+    sphere.HELPER.setPath(path)
+  }
+  // sphere.path = path
+  // let targetPosition = sphere.path[ 0 ];
+  // sphere.velocity = targetPosition.clone().sub( sphere.position );
+
+  // if (sphere.velocity.lengthSq() > 0.5) {
+  //   sphere.velocity.normalize();
+  //   // Move to next waypoint
+  //   sphere.position.add( sphere.velocity.multiplyScalar( deltaTime * SPEED ) );
+  // } else {
+  //   // Remove node from the path we calculated
+  //   sphere.path.shift();
+  // }
+}
+
 function resetPath(sphere) {
   const targetGroup = PATHFINDING.getGroup(ZONE, sphere.position);
   if (!sphere.position.x) {
-    // Collision with BVH due to bad navmesh
     return
   }
-  // console.log("Target group", targetGroup)
   const closestNode = PATHFINDING.getClosestNode(sphere.position, ZONE, targetGroup)
-  const randomNode = PATHFINDING.getRandomNode(ZONE, targetGroup)
+  const randomNode = getWanderTarget(sphere.originNode.centroid, ZONE, targetGroup)
   const path = PATHFINDING.findPath(closestNode.centroid, randomNode, ZONE, targetGroup);
   sphere.path = path
+
+  // Show only current path:
   sphere.HELPER.setPlayerPosition(sphere.position)
   sphere.HELPER.setTargetPosition(randomNode)
   sphere.HELPER.setPath(path)
+
+  // Show all previous paths as well:
+  // const HELPER = new PathfindingHelper();
+  // scene.add( HELPER );
+  // HELPER.setPlayerPosition(sphere.position)
+  // HELPER.setTargetPosition(randomNode)
+  // HELPER.setPath(path)
 }
 
 const clock = new THREE.Clock()
 
+let player
 const init = async () => {
 	await loadColliderEnvironment();
+  const red = new THREE.Color( 0x880000 );
+	player = new THREE.Mesh(
+		new THREE.SphereGeometry( 1, 20, 20 ),
+		new THREE.MeshStandardMaterial( { color: red } )
+	);
+  player.node = PATHFINDING.getClosestNode(player.position, ZONE, 0)
+  console.log("Player node", player.node)
+  // player.position.copy(player.node.centroid)
+	scene.add( player );
+  for (const sphere of spheres) {
+    followPursuePath(sphere, player.node.centroid)
+  }
+
 }
 const loop = () => {
   controls.update()
